@@ -1,5 +1,4 @@
 import axios, { AxiosInstance } from "axios"
-import { settings } from "../constants/settings"
 
 export default class ZendeskService {
 
@@ -8,10 +7,10 @@ export default class ZendeskService {
   instanceToken: string
   service: AxiosInstance
 
-  constructor() {
-    this.instanceSubdomain = settings.zendesk.subdomain
-    this.instanceEmail = settings.zendesk.email
-    this.instanceToken = settings.zendesk.token
+  constructor(zendeskSettings: any) {
+    this.instanceSubdomain = zendeskSettings.subdomain
+    this.instanceEmail = zendeskSettings.email
+    this.instanceToken = zendeskSettings.token
 
     this.service = axios.create({
       baseURL: `https://${this.instanceSubdomain}.zendesk.com/`,

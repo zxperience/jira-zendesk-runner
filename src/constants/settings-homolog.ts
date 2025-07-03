@@ -1,42 +1,16 @@
 export const settings: Settings = {
-  zendesk: [
-    {
-      subdomain: 'cxsenior',
-      email: 'gapolinario@zxperience.com',
-      token: '',
-    },
-    {
-      subdomain: 'cxsenior1643201684',
-      email: 'gapolinario@zxperience.com',
-      token: '',
-    }
-  ],
+  zendesk: {
+    subdomain: 'cxsenior1643201684',
+    email: 'gapolinario@zxperience.com',
+    token: '',
+  },
   jira: [
     {
       subdomain: 'megasistemas',
       email: 'jiramega.zendesk@senior.com.br',
       token: '',
-      linked_issue_zendesk_field_id: '38564149534100',
-      sync_fields_jira_to_zendesk: [
-        {
-          jira_field_id: 'status',
-          zendesk_field_id: '360046905051',
-          is_jira_system_field: true,
-          jira_field_value_property: 'name'
-        },
-        {
-          jira_field_id: 'fixVersions',
-          zendesk_field_id: '1900000163227',
-          is_jira_system_field: true,
-          jira_field_value_property: 'name'
-        },
-        {
-          jira_field_id: 'key',
-          zendesk_field_id: '360044030311',
-          is_jira_system_field: true,
-        },
-      ],
-      sync_fields_zendesk_to_jira: [
+      linked_issue_zendesk_field_id: '37675812791316',
+      sync_fields: [
         {
           jira_field_id: 'customfield_17262',
           zendesk_field_id: '360045575892'
@@ -58,6 +32,10 @@ export const settings: Settings = {
           zendesk_field_id: '360044030471'
         },
         {
+          jira_field_id: 'status',
+          zendesk_field_id: '360046905051'
+        },
+        {
           jira_field_id: 'customfield_17164',
           zendesk_field_id: '360044024752'
         },
@@ -72,6 +50,10 @@ export const settings: Settings = {
         {
           jira_field_id: 'customfield_17229',
           zendesk_field_id: '360038543171'
+        },
+        {
+          jira_field_id: 'fixVersions',
+          zendesk_field_id: '1900000163227'
         },
         {
           jira_field_id: 'customfield_17121',
@@ -104,19 +86,7 @@ export const settings: Settings = {
       email: 'suporte@ilog.com.br',
       token: '',
       linked_issue_zendesk_field_id: '',
-      sync_fields_jira_to_zendesk: [],
-      sync_fields_zendesk_to_jira: [
-        {
-          jira_field_id: 'customfield_11122',
-          zendesk_field_id: '1900001430487',
-          need_underline: true,
-          //is_jira_array_field: true,
-        },
-        {
-          jira_field_id: 'customfield_10593',
-          zendesk_field_id: '1900000223107'
-        },
-      ],
+      sync_fields: []
     }
   ],
 }
@@ -126,7 +96,7 @@ export interface Settings {
     subdomain: string,
     email: string,
     token: string,
-  }[],
+  },
   jira: JiraSettings[]
 }
 
@@ -135,19 +105,10 @@ export interface JiraSettings {
   email: string,
   token: string,
   linked_issue_zendesk_field_id: string,
-  sync_fields_jira_to_zendesk: SyncField[],
-  sync_fields_zendesk_to_jira: SyncField[],
+  sync_fields: SyncField[],
 }
 
 export interface SyncField {
   jira_field_id: string | number,
   zendesk_field_id: string | number,
-  zendesk_field_type?: string,
-  jira_field_type?: string,
-  is_zendesk_system_field?: boolean,
-  is_jira_system_field?: boolean,
-  jira_field_value_property?: string
-  zendesk_field_value_property?: string
-  is_jira_array_field?: boolean
-  need_underline?: boolean
 }
