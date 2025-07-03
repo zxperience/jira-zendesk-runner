@@ -26,16 +26,32 @@ export async function jiraZendeskRunner(myTimer: Timer, context: InvocationConte
                 context.log('>>>>> IDs:::', issuesIds)
 
                 for (var issueId of issuesIds) {
-                    const issue = await jiraService.getIssue(issueId);
+                    let issue = null
+                    try {
+                        issue = await jiraService.getIssue(issueId);
+                    } catch (error) {
+                        context.log('ERRO AO BUSCAR ISSUE:', issueId);
+                        continue;
+                    }
+
+                    if (!issue) {
+                        context.log('ISSUE NÃO ENCONTRADA:', issueId);
+                        continue;
+                    }
+
                     context.log('ISSUE:::', issueId);
 
                     // sincronização dos fields Zendesk -> Jira
+
                     try {
                         for (var syncField of jiraSettings.sync_fields_zendesk_to_jira) {
-                            if (getTicketField(ticket, syncField.zendesk_field_id) === undefined) {
-                                context.log('CAMPO NÃO ENCONTRADO NO ZENDESK. PULANDO...')
-                                continue;
+                            if (!syncField.is_zendesk_system_field) {
+                                if (getTicketField(ticket, syncField.zendesk_field_id) === undefined) {
+                                    context.log('CAMPO NÃO ENCONTRADO NO ZENDESK. PULANDO...')
+                                    continue;
+                                }
                             }
+
                             let ticketFieldValue = null;
                             if (syncField.is_zendesk_system_field) {
                                 if (syncField.zendesk_field_value_property) {
@@ -46,17 +62,35 @@ export async function jiraZendeskRunner(myTimer: Timer, context: InvocationConte
                             } else {
                                 ticketFieldValue = ticket.custom_fields.find((field: any) => field.id == syncField.zendesk_field_id)?.value;
                             }
+
                             const issueFieldValue = issue.fields?.[`${syncField.jira_field_id}`];
+
                             context.log('>>> Sincronização de fields (Zendesk -> Jira)');
                             context.log('TICKET FIELD VALUE:', ticketFieldValue);
 
                             if (!areEquivalent(ticketFieldValue, issueFieldValue)) {
                                 let valueToSet = ticketFieldValue;
 
+                                // APLICAR MAPEAMENTO, se existir
+                                if (syncField.map && Array.isArray(syncField.map)) {
+                                    const mappings = new Map(syncField.map.map(entry => [entry.from, entry.to]));
+
+                                    // Se for array (valores separados por vírgula), aplica o mapeamento a cada item
+                                    if (typeof valueToSet === 'string' && valueToSet.includes(',')) {
+                                        valueToSet = valueToSet
+                                            .split(',')
+                                            .map(val => val.trim())
+                                            .map(val => mappings.get(val) ?? val)
+                                            .join(', ');
+                                    } else if (typeof valueToSet === 'string') {
+                                        valueToSet = mappings.get(valueToSet) ?? valueToSet;
+                                    }
+                                }
+
                                 if (syncField.is_date) {
                                     const dateToSet = new Date(new Date(valueToSet.replace(' ', 'T')).getTime());
                                     const formattedDate = dateToSet.toISOString().replace('Z', '-0300');
-                                    valueToSet = formattedDate
+                                    valueToSet = formattedDate;
                                 }
 
                                 if (syncField.need_underline) {
@@ -64,17 +98,20 @@ export async function jiraZendeskRunner(myTimer: Timer, context: InvocationConte
                                 }
 
                                 if (syncField.is_jira_array_field) {
-                                    valueToSet = [valueToSet]
+                                    valueToSet = [valueToSet];
                                 }
 
                                 context.log(`>>> Atualizando field no Jira [${syncField.jira_field_id}] com o valor: `, valueToSet ?? null);
-                                
 
                                 if (syncField.jira_field_value_property) {
-                                    await jiraService.updateJiraField(issueId, String(syncField.jira_field_id), { [syncField.jira_field_value_property]: valueToSet ?? null });
+                                    await jiraService.updateJiraField(issueId, String(syncField.jira_field_id), {
+                                        [syncField.jira_field_value_property]: valueToSet ?? null
+                                    });
                                 } else {
                                     await jiraService.updateJiraField(issueId, String(syncField.jira_field_id), valueToSet ?? null);
                                 }
+                            } else {
+                                context.log('não atualiza valores, equivalente. Zendesk field ID:', syncField.zendesk_field_id);
                             }
                         }
 
@@ -95,6 +132,8 @@ export async function jiraZendeskRunner(myTimer: Timer, context: InvocationConte
                     for (var syncField of jiraSettings.sync_fields_jira_to_zendesk) {
                         const issueFieldValue = issue.fields?.[`${syncField.jira_field_id}`];
                         const ticketFieldValue = getTicketField(ticket, syncField.zendesk_field_id)
+
+                        context.log(`JIRA TO ZENDESK. JIRA: ${syncField.jira_field_id} ZENDESK: ${syncField.zendesk_field_id}`)
 
                         if (ticketFieldValue === undefined) {
                             context.log('CAMPO NÃO ENCONTRADO NO ZENDESK. PULANDO...')
@@ -125,6 +164,22 @@ export async function jiraZendeskRunner(myTimer: Timer, context: InvocationConte
                                 }
                             }
 
+                            // APLICAR MAPEAMENTO, se existir
+                            if (syncField.map && Array.isArray(syncField.map)) {
+                                const mappings = new Map(syncField.map.map(entry => [entry.from, entry.to]));
+
+                                // Se for array (valores separados por vírgula), aplica o mapeamento a cada item
+                                if (typeof valueToSet === 'string' && valueToSet.includes(',')) {
+                                    valueToSet = valueToSet
+                                        .split(',')
+                                        .map(val => val.trim())
+                                        .map(val => mappings.get(val) ?? val)
+                                        .join(', ');
+                                } else if (typeof valueToSet === 'string') {
+                                    valueToSet = mappings.get(valueToSet) ?? valueToSet;
+                                }
+                            }
+
                             if (syncField.need_underline) {
                                 valueToSet = valueToSet.replace(/\s+/g, '_');
                             }
@@ -143,7 +198,7 @@ export async function jiraZendeskRunner(myTimer: Timer, context: InvocationConte
 
                     for (var comment of formattedComments) {
                         if (!comment.includes('#zendesk')) {
-                            console.log('>>> Comentário não contém #zendesk, pulando:', comment);
+                            console.log('>>> Comentário não contém #zendesk, pulando');
                             continue;
                         }
                         context.log('>>> Adicionando novo comentário ao ticket');
