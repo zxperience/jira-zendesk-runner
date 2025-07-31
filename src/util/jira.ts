@@ -3,10 +3,9 @@ export function formatJiraCommentToHtml(comment: any): string {
   if (!comment || !comment.body || comment.body.type !== 'doc') return '';
 
   const authorName = comment.author?.displayName ?? 'Desconhecido';
-  const createdDate = new Date(comment.created).toLocaleString('pt-BR');
-  const updatedDate = comment.updated !== comment.created
-    ? ` <small>(editado em ${new Date(comment.updated).toLocaleString('pt-BR')})</small>`
-    : '';
+  const createdDate = new Date('2025-07-31T15:58:09.199-0300').toLocaleString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+  });
 
   const bodyHtml = renderAdfToHtml(comment.body);
 
@@ -14,7 +13,7 @@ export function formatJiraCommentToHtml(comment: any): string {
         <div style="margin-bottom: 1em;">
             <i>[Comentário adicionado a partir do Jira. ID: ${comment.id}]</i><br>
             <strong>Por:</strong>
-            <strong>${authorName}</strong> <small>(${createdDate})</small>${updatedDate}
+            <strong>${authorName}</strong> <small>(${createdDate})</small>
             <div style="margin-top: 0.5em;">${bodyHtml}</div>
         </div>
     `;

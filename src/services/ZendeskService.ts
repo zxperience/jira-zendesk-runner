@@ -21,34 +21,55 @@ export default class ZendeskService {
     })
   }
 
-  public async getLinkedTickets(fieldId) {
-    let allTickets: any[] = []
-    let nextPageUrl: string | null = `/api/v2/search.json?query=custom_field_${fieldId}:*`
-    let currentPage = 1
+  public async getLinkedTickets(fieldId: string): Promise<any[]> {
+    const allTickets: any[] = [];
+    let nextPageUrl: string | null = this.buildSearchUrl(fieldId);
+    let currentPage = 1;
 
     while (nextPageUrl) {
-      console.log('>>> Buscando tickets - página:', currentPage)
+      console.log(`Buscando tickets - página ${currentPage}`);
 
       try {
-        const response: any = await this.service.get(currentPage != 1 ? this.extractPathAndQuery(nextPageUrl) : nextPageUrl)
-        console.log('>>> Tickets encontrados:', response.data.count)
-        allTickets = allTickets.concat(response.data.results)
-        nextPageUrl = response.data.next_page || null
+        const path = currentPage > 1 ? this.extractPathAndQuery(nextPageUrl) : nextPageUrl;
+        const response: any = await this.service.get(path);
 
-      } catch (error) {
-        console.error('>>> Erro ao buscar tickets:', error)
-        break
+        const { results, count, next_page } = response.data;
+        console.log(`✅ Tickets encontrados: ${count}`);
+
+        allTickets.push(...results);
+        nextPageUrl = next_page || null;
+
+      } catch (error: any) {
+        const message = error?.response?.data ?? error;
+        console.error('❌ Erro ao buscar tickets:', message);
+        break;
       }
 
-      currentPage++
+      currentPage++;
     }
 
-    return allTickets
+    return allTickets;
   }
+
+  private buildSearchUrl(fieldId: string): string {
+    // Apenas tickets abertos (status<solved), com qualquer valor no campo customizado
+    return `/api/v2/search.json?query=type:ticket status<solved custom_field_${fieldId}:*`;
+  }
+
 
   public async getTicket(id: string | number) {
     const response = await this.service.get(`/api/v2/tickets/${id}`)
     return response.data.ticket
+  }
+
+  public async getGroup(groupId: number | string) {
+    try {
+      const response = await this.service.get(`/api/v2/groups/${groupId}`);
+      return response.data.group;
+    } catch (error: any) {
+      console.error('>>> Erro ao buscar grupo:', error?.response?.data ?? error);
+      throw error;
+    }
   }
 
   public async getTicketComments(ticketId: number | string) {
