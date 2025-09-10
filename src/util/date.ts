@@ -1,3 +1,3 @@
 export const datetimeStringToIso = (date: string) => {
-  return new Date(date.replace(" ", "T")).toISOString();
+  return new Date(date.replace(" ", "T")).toISOString().replace("Z", "-0300");
 };

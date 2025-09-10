@@ -46,4 +46,9 @@ export interface SyncField {
   jira_field_value_property?: string
   zendesk_field_value_property?: string
   is_jira_array_field?: boolean
+  need_underline?: boolean
+  is_date?: boolean
+  map?: { from: string, to: string }[]
+  is_iso_datetime?: boolean
+  is_atlasian_data?: boolean
 }

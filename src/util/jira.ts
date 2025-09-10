@@ -48,6 +48,17 @@ function renderAdfNode(node: any): string {
       }
       return text;
 
+    case 'inlineCard': {
+      const url = node.attrs?.url ?? '#';
+      const issueKey = url.split('/').pop() ?? url;
+      return `
+        <span style="display:inline-block; padding:2px 6px; border:1px solid #ddd; border-radius:4px; background:#f9f9f9;">
+          <a href="${escapeHtml(url)}" target="_blank" style="text-decoration:none; color:#0366d6;">
+            ${escapeHtml(issueKey)}
+          </a>
+        </span>
+      `;
+    }
     case 'hardBreak':
       return '<br>';
 
@@ -77,4 +88,8 @@ function escapeHtml(text: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+export function getIssueSubdomain(issue: any): string {
+  return issue?.self?.split('/')[2] ?? 'N/A';
 }

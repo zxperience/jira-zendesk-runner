@@ -4,66 +4,20 @@ import { settings } from "../constants/settings";
 import { getTicketField } from "../util/zendesk";
 import JiraService from "../services/JiraService";
 import { areEquivalent } from "../util/string";
-import { formatJiraCommentToHtml } from "../util/jira";
+import { formatJiraCommentToHtml, getIssueSubdomain } from "../util/jira";
 import axios from "axios";
 import { datetimeStringToIso } from "../util/date";
 
-async function processWithConcurrency<T>(
-    items: T[],
-    limit: number,
-    fn: (item: T) => Promise<void>,
-    delayMs: number = 2000
-) {
-    const executing: Promise<void>[] = [];
-
-    for (const item of items) {
-        const p = fn(item);
-        executing.push(p);
-
-        if (executing.length >= limit) {
-            await Promise.all(executing);
-            executing.length = 0;
-            await new Promise((resolve) => setTimeout(resolve, delayMs));
-        }
-    }
-
-    if (executing.length > 0) {
-        await Promise.all(executing);
-    }
-}
-
-
-
-function logError(
-    context: InvocationContext,
-    message: string,
-    error: any,
-    options?: {
-        jiraAccount?: string;
-        zendeskTicketId?: string;
-        direction?: "Zendesk -> Jira" | "Jira -> Zendesk";
-        zendeskField?: string;
-        jiraField?: string;
-        value?: any;
-    }
-) {
-    const details = options
-        ? ` | Conta Jira: ${options.jiraAccount ?? "N/A"} | Ticket Zendesk: ${
-              options.zendeskTicketId ?? "N/A"
-          } | Direção: ${options.direction ?? "N/A"} | Campo Zendesk: ${
-              options.zendeskField ?? "N/A"
-          } | Campo Jira: ${options.jiraField ?? "N/A"} | Valor: ${JSON.stringify(options.value)}`
-        : "";
-
-    const fullMessage = `${message}${details}`;
-
+// Função de log de erros
+function logError(context: InvocationContext, message: string, error: any) {
     if (axios.isAxiosError(error)) {
-        context.error(fullMessage, error.response?.data ?? error.message);
+        context.error(message, error.response?.data ?? error.message);
     } else {
-        context.error(fullMessage, error);
+        context.error(message, error);
     }
 }
 
+// Função de log de sincronização
 function logSync(
     context: InvocationContext,
     jiraAccount: string,
@@ -74,12 +28,11 @@ function logSync(
     value: any
 ) {
     context.log(
-        `[SYNC] Conta Jira: ${jiraAccount} | Ticket Zendesk: ${zendeskTicketId} | Direção: ${direction} | Campo Zendesk: ${zendeskField} | Campo Jira: ${jiraField} | Valor: ${JSON.stringify(
-            value
-        )}`
+        `[SYNC] Conta Jira: ${jiraAccount} | Ticket Zendesk: ${zendeskTicketId} | Direção: ${direction} | Campo Zendesk: ${zendeskField} | Campo Jira: ${jiraField} | Valor: ${JSON.stringify(value)}`
     );
 }
 
+// Sincronização Zendesk -> Jira
 async function syncZendeskToJiraFields(
     zendeskService: ZendeskService,
     ticket: any,
@@ -88,91 +41,84 @@ async function syncZendeskToJiraFields(
     syncFields: any[],
     context: InvocationContext
 ) {
-    await processWithConcurrency(syncFields, 5, async (syncField) => {
-        let valueToSet: any = null;
-        try {
-            if (!syncField.is_zendesk_system_field && getTicketField(ticket, syncField.zendesk_field_id) === undefined) {
-                return;
-            }
+    await Promise.allSettled(
+        syncFields.map(async (syncField) => {
+            try {
+                if (!syncField.is_zendesk_system_field && getTicketField(ticket, syncField.zendesk_field_id) === undefined) {
+                    return;
+                }
 
-            if (syncField.is_zendesk_system_field) {
-                if (syncField.zendesk_field_id === "group_id") {
-                    const group = await zendeskService.getGroup(ticket.group_id);
-                    valueToSet = group?.name ?? "";
+                let ticketFieldValue: any = null;
+                if (syncField.is_zendesk_system_field) {
+                    if (syncField.zendesk_field_id === "group_id") {
+                        const group = await zendeskService.getGroup(ticket.group_id);
+                        ticketFieldValue = group?.name ?? "";
+                    } else {
+                        ticketFieldValue = syncField.zendesk_field_value_property
+                            ? ticket?.[syncField.zendesk_field_id]?.[syncField.zendesk_field_value_property] ?? ""
+                            : ticket?.[syncField.zendesk_field_id];
+                    }
                 } else {
-                    valueToSet = syncField.zendesk_field_value_property
-                        ? ticket?.[syncField.zendesk_field_id]?.[syncField.zendesk_field_value_property] ?? ""
-                        : ticket?.[syncField.zendesk_field_id];
+                    ticketFieldValue = ticket.custom_fields.find((field: any) => field.id == syncField.zendesk_field_id)?.value;
                 }
-            } else {
-                valueToSet = ticket.custom_fields.find((field: any) => field.id == syncField.zendesk_field_id)?.value;
-            }
 
-            const issueFieldValue = issue.fields?.[syncField.jira_field_id];
-            if (areEquivalent(valueToSet, issueFieldValue)) return;
+                const issueFieldValue = issue.fields?.[syncField.jira_field_id];
+                if (areEquivalent(ticketFieldValue, issueFieldValue)) return;
 
-            if (syncField.map) {
-                const mappings = new Map(syncField.map.map((entry: any) => [entry.from, entry.to]));
-                if (typeof valueToSet === "string" && valueToSet.includes(",")) {
-                    valueToSet = valueToSet
-                        .split(",")
-                        .map((val) => mappings.get(val.trim()) ?? val.trim())
-                        .join(", ");
-                } else if (typeof valueToSet === "string") {
-                    valueToSet = mappings.get(valueToSet) ?? valueToSet;
+                let valueToSet = ticketFieldValue;
+
+                if (syncField.map) {
+                    const mappings = new Map(syncField.map.map((entry: any) => [entry.from, entry.to]));
+                    if (typeof valueToSet === "string" && valueToSet.includes(",")) {
+                        valueToSet = valueToSet
+                            .split(",")
+                            .map((val) => mappings.get(val.trim()) ?? val.trim())
+                            .join(", ");
+                    } else if (typeof valueToSet === "string") {
+                        valueToSet = mappings.get(valueToSet) ?? valueToSet;
+                    }
                 }
-            }
 
-            if (syncField.is_date) {
-                const dateToSet = new Date(new Date(valueToSet.replace(" ", "T")).getTime());
-                valueToSet = dateToSet.toISOString().replace("Z", "-0300");
-            }
-            if (syncField.is_iso_datetime) {
-                valueToSet = datetimeStringToIso(valueToSet);
-            }
-            if (syncField.need_underline) {
-                valueToSet = valueToSet.replace(/\s+/g, "_");
-            }
-            if (syncField.is_jira_array_field) {
-                valueToSet = [valueToSet];
-            }
+                if (syncField.is_date) {
+                    if (valueToSet === null || valueToSet === "") {
+                        valueToSet = null;
+                    } else {
+                        const dateToSet = new Date(new Date(valueToSet.replace(" ", "T")).getTime());
+                        valueToSet = dateToSet.toISOString().replace("Z", "-0300");
+                    }
+                }
+                if (syncField.is_iso_datetime) {
+                    valueToSet = datetimeStringToIso(valueToSet);
+                }
+                if (syncField.need_underline) {
+                    valueToSet = valueToSet.replace(/\s+/g, "_");
+                }
+                if (syncField.is_jira_array_field) {
+                    valueToSet = [valueToSet];
+                }
 
-            if (syncField.is_atlasian_data) {
-                valueToSet = {
-                    type: 'doc',
-                    version: 1,
-                    content: [{type: 'paragraph', content: [{type: 'text', text: valueToSet}]}]
-                };
-            }
+                if (syncField.is_atlasian_data) {
+                    valueToSet = {
+                        type: 'doc',
+                        version: 1,
+                        content: [{type: 'paragraph', content: [{type: 'text', text: valueToSet}]}]
+                    };
+                }
 
-            if (syncField.jira_field_value_property) {
-                await jiraService.updateJiraField(issue.key, String(syncField.jira_field_id), {
-                    [syncField.jira_field_value_property]: valueToSet ?? null,
-                });
-            } else {
-                await jiraService.updateJiraField(issue.key, String(syncField.jira_field_id), valueToSet ?? null);
-            }
+                if (syncField.jira_field_value_property) {
+                    await jiraService.updateJiraField(issue.key, String(syncField.jira_field_id), {
+                        [syncField.jira_field_value_property]: valueToSet ?? null,
+                    });
+                } else {
+                    await jiraService.updateJiraField(issue.key, String(syncField.jira_field_id), valueToSet ?? null);
+                }
 
-            logSync(
-                context,
-                jiraService.instanceSubdomain,
-                ticket.id,
-                "Zendesk -> Jira",
-                syncField.zendesk_field_id,
-                syncField.jira_field_id,
-                valueToSet
-            );
-        } catch (error) {
-            logError(context, `Erro ao sincronizar campo [Zendesk->Jira] na issue ${issue.key}`, error, {
-                jiraAccount: jiraService.instanceSubdomain,
-                zendeskTicketId: ticket.id,
-                direction: "Zendesk -> Jira",
-                zendeskField: syncField.zendesk_field_id,
-                jiraField: syncField.jira_field_id,
-                value: valueToSet,
-            });
-        }
-    });
+                logSync(context, jiraService.instanceSubdomain, ticket.id, "Zendesk -> Jira", syncField.zendesk_field_id, syncField.jira_field_id, valueToSet);
+            } catch (error) {
+                logError(context, `Erro de sincronização [Zendesk->Jira] - ticket id: ${ticket.id} | campo Zendesk: ${syncField.zendesk_field_id} | issue: ${issue.key} [${jiraService.instanceSubdomain}] | campo Jira: ${syncField.jira_field_id}`, error);
+            }
+        })
+    );
 }
 
 async function syncJiraToZendeskFields(
@@ -182,67 +128,69 @@ async function syncJiraToZendeskFields(
     syncFields: any[],
     context: InvocationContext
 ) {
-    await processWithConcurrency(syncFields, 5, async (syncField) => {
-        let valueToSet: any = null;
-        try {
-            const issueFieldValue = issue.fields?.[syncField.jira_field_id];
-            const ticketFieldValue = getTicketField(ticket, syncField.zendesk_field_id);
-            if (ticketFieldValue === undefined || areEquivalent(issueFieldValue, ticketFieldValue)) return;
+    try {
+        const fieldsToUpdate: { id: number | string; value: any }[] = [];
 
-            valueToSet = issueFieldValue;
+        for (const syncField of syncFields) {
+            try {
+                const issueFieldValue = issue.fields?.[syncField.jira_field_id];
 
-            if (syncField.is_jira_system_field) {
-                if (syncField.is_jira_array_field) {
-                    valueToSet =
-                        issueFieldValue
-                            ?.map((item: any) => item?.[syncField.jira_field_value_property] ?? item?.name)
-                            .join(", ") ?? "";
-                } else {
-                    valueToSet = syncField.jira_field_value_property
-                        ? issueFieldValue?.[syncField.jira_field_value_property] ?? ""
-                        : issueFieldValue ?? "";
+                let valueToSet = issueFieldValue;
+                if (syncField.is_jira_system_field) {
+                    if (syncField.is_jira_array_field) {
+                        valueToSet =
+                            issueFieldValue?.map((item: any) => item?.[syncField.jira_field_value_property] ?? item?.name).join(", ") ?? "";
+                    } else {
+                        valueToSet = syncField.jira_field_value_property
+                            ? issueFieldValue?.[syncField.jira_field_value_property] ?? ""
+                            : issueFieldValue ?? "";
+                    }
                 }
-            }
 
-            if (syncField.map) {
-                const mappings = new Map(syncField.map.map((entry: any) => [entry.from, entry.to]));
-                if (typeof valueToSet === "string" && valueToSet.includes(",")) {
-                    valueToSet = valueToSet
-                        .split(",")
-                        .map((val) => mappings.get(val.trim()) ?? val.trim())
-                        .join(", ");
-                } else if (typeof valueToSet === "string") {
-                    valueToSet = mappings.get(valueToSet) ?? valueToSet;
+                if (syncField.map) {
+                    const mappings = new Map(syncField.map.map((entry: any) => [entry.from, entry.to]));
+                    if (typeof valueToSet === "string" && valueToSet.includes(",")) {
+                        valueToSet = valueToSet
+                            .split(",")
+                            .map((val) => mappings.get(val.trim()) ?? val.trim())
+                            .join(", ");
+                    } else if (typeof valueToSet === "string") {
+                        valueToSet = mappings.get(valueToSet) ?? valueToSet;
+                    }
                 }
-            }
-            if (syncField.need_underline) {
-                valueToSet = valueToSet.replace(/\s+/g, "_");
-            }
+                if (syncField.need_underline) {
+                    valueToSet = valueToSet.replace(/\s+/g, "_");
+                }
 
-            await zendeskService.setCustomFieldValue(ticket.id, syncField.zendesk_field_id, valueToSet ?? null);
+                if (syncField.is_atlasian_data) {
+                    if (valueToSet?.content) {
+                        valueToSet = valueToSet.content[0]?.content?.[0]?.text ?? null;
+                    } else {
+                        valueToSet = null;
+                    }
+                }
 
-            logSync(
-                context,
-                issue?.self?.split("/")[2] ?? "N/A",
-                ticket.id,
-                "Jira -> Zendesk",
-                syncField.zendesk_field_id,
-                syncField.jira_field_id,
-                valueToSet
-            );
-        } catch (error) {
-            logError(context, `Erro ao sincronizar campo [Jira->Zendesk] no ticket ${ticket.id}`, error, {
-                jiraAccount: issue?.self?.split("/")[2] ?? "N/A",
-                zendeskTicketId: ticket.id,
-                direction: "Jira -> Zendesk",
-                zendeskField: syncField.zendesk_field_id,
-                jiraField: syncField.jira_field_id,
-                value: valueToSet,
-            });
+                fieldsToUpdate.push({
+                    id: syncField.zendesk_field_id,
+                    value: valueToSet ?? null,
+                });
+
+                logSync(context, issue?.self?.split("/")[2] ?? "N/A", ticket.id, "Jira -> Zendesk", syncField.zendesk_field_id, syncField.jira_field_id, valueToSet);
+            } catch (error) {
+                logError(context, `Erro de sincronização [Jira->Zendesk] - ticket id: ${ticket.id} | campo Zendesk: ${syncField.zendesk_field_id} | issue: ${issue.key} [${getIssueSubdomain(issue)}] | campo Jira: ${syncField.jira_field_id}`, error);
+            }
         }
-    });
+
+        if (fieldsToUpdate.length > 0) {
+            await zendeskService.setMultipleCustomFields(ticket.id, fieldsToUpdate);
+        }
+    } catch (error) {
+        logError(context, `Erro ao sincronizar campos Jira->Zendesk para ticket ${ticket.id}`, error);
+    }
 }
 
+
+// Sincronização de comentários
 async function syncComments(
     ticket: any,
     issueId: string,
@@ -257,74 +205,73 @@ async function syncComments(
         ]);
 
         const newComments = jiraComments.filter(
-            (jiraComment: any) =>
-                !zendeskComments.some((zendeskComment: any) => zendeskComment.html_body.includes(`ID: ${jiraComment.id}`))
+            (jiraComment: any) => !zendeskComments.some((zendeskComment: any) => zendeskComment.html_body.includes(`ID: ${jiraComment.id}`))
         );
 
-        await processWithConcurrency(newComments, 5, async (comment: any) => {
-            const formatted = formatJiraCommentToHtml(comment);
-            if (formatted.includes("#zendesk")) {
-                await zendeskService.addPrivateComment(ticket.id, formatted);
-            }
-        });
+        await Promise.allSettled(
+            newComments.map(async (comment: any) => {
+                const formatted = formatJiraCommentToHtml(comment);
+                if (formatted.includes("#zendesk")) {
+                    await zendeskService.addPrivateComment(ticket.id, formatted);
+                }
+            })
+        );
     } catch (error) {
         logError(context, `Erro ao sincronizar comentários da issue ${issueId} com ticket ${ticket.id}`, error);
     }
 }
 
+// Runner principal
 export async function jiraZendeskRunner(myTimer: Timer, context: InvocationContext): Promise<void> {
     context.log(">>> Iniciando rotina de sincronização");
 
-    await processWithConcurrency(settings.zendesk, 2, async (zendeskSettings) => {
-        const zendeskService = new ZendeskService(zendeskSettings);
+    await Promise.allSettled(
+        settings.zendesk.map(async (zendeskSettings) => {
+            const zendeskService = new ZendeskService(zendeskSettings);
 
-        await processWithConcurrency(settings.jira, 2, async (jiraSettings) => {
-            const jiraService = new JiraService(jiraSettings);
+            await Promise.allSettled(
+                settings.jira.map(async (jiraSettings) => {
+                    const jiraService = new JiraService(jiraSettings);
+                    try {
+                        const linkedTickets =
+                            (await zendeskService.getLinkedTickets(jiraSettings.linked_issue_zendesk_field_id)) ?? [];
 
-            try {
-                const linkedTickets =
-                    (await zendeskService.getLinkedTickets(jiraSettings.linked_issue_zendesk_field_id)) ?? [];
+                        await Promise.allSettled(
+                            linkedTickets.map(async (ticket: any) => {
+                                try {
+                                    const linkedFieldValue = getTicketField(ticket, jiraSettings.linked_issue_zendesk_field_id);
+                                    if (!linkedFieldValue) return;
 
-                await processWithConcurrency(linkedTickets, 2, async (ticket: any) => {
-                    const linkedFieldValue = getTicketField(ticket, jiraSettings.linked_issue_zendesk_field_id);
-                    if (!linkedFieldValue) return;
+                                    const issuesIds = linkedFieldValue.replace(/\s+/g, "").split(",");
+                                    await Promise.allSettled(
+                                        issuesIds.map(async (issueId: string) => {
+                                            try {
+                                                const issue = await jiraService.getIssue(issueId);
+                                                if (!issue) return;
 
-                    const issuesIds = linkedFieldValue.replace(/\s+/g, "").split(",");
-
-                    await processWithConcurrency(issuesIds, 2, async (issueId: string) => {
-                        try {
-                            const issue = await jiraService.getIssue(issueId);
-                            if (!issue) return;
-
-                            await syncZendeskToJiraFields(
-                                zendeskService,
-                                ticket,
-                                issue,
-                                jiraService,
-                                jiraSettings.sync_fields_zendesk_to_jira,
-                                context
-                            );
-                            await syncJiraToZendeskFields(
-                                ticket,
-                                issue,
-                                zendeskService,
-                                jiraSettings.sync_fields_jira_to_zendesk,
-                                context
-                            );
-                            await syncComments(ticket, issueId, zendeskService, jiraService, context);
-                        } catch (error) {
-                            logError(context, `Erro ao processar issue ${issueId} vinculada ao ticket ${ticket.id}`, error);
-                        }
-                    });
-                });
-            } catch (error) {
-                logError(context, `Erro na integração com Jira [${jiraSettings.subdomain}]`, error);
-            }
-        });
-    });
+                                                await syncZendeskToJiraFields(zendeskService, ticket, issue, jiraService, jiraSettings.sync_fields_zendesk_to_jira, context);
+                                                await syncJiraToZendeskFields(ticket, issue, zendeskService, jiraSettings.sync_fields_jira_to_zendesk, context);
+                                                await syncComments(ticket, issueId, zendeskService, jiraService, context);
+                                            } catch (error) {
+                                                logError(context, `Erro ao processar issue ${issueId} vinculada ao ticket ${ticket.id}`, error);
+                                            }
+                                        })
+                                    );
+                                } catch (error) {
+                                    logError(context, `Erro ao processar ticket ${ticket.id}`, error);
+                                }
+                            })
+                        );
+                    } catch (error) {
+                        logError(context, `Erro na integração com Jira [${jiraSettings.subdomain}]`, error);
+                    }
+                })
+            );
+        })
+    );
 }
 
 app.timer("jiraZendeskRunner", {
-    schedule: "0 */1 * * * *",
+    schedule: "0 */4 * * * *",
     handler: jiraZendeskRunner,
 });

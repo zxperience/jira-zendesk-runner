@@ -1,31 +1,51 @@
 const zendeskStatusMap = [
-            {from: '13098', to: 'status_jira_ag_cliente_suporte'},
-            {from: '11252', to: 'status_jira_aguardando_review'},
-            {from: '12849', to: 'status_jira_backlog'},
-            {from: '11251', to: 'status_jira_backlog'},
-            {from: '11209', to: 'status_jira_blocked'},
-            {from: '10731', to: 'status_jira_done'},
-            {from: '11000', to: 'status_jira_done'},
-            {from: '11507', to: 'status_jira_done'},
-            {from: '12074', to: 'status_jira_done'},
-            {from: '10197', to: 'status_jira_done'},
-            {from: '11507', to: 'status_jira_done'},
-            {from: '11642', to: 'status_jira_done'},
+  { from: '13098', to: 'status_jira_ag_cliente_suporte' },
+  { from: '11252', to: 'status_jira_aguardando_review' },
+  { from: '12849', to: 'status_jira_backlog' },
+  { from: '11251', to: 'status_jira_backlog' },
+  { from: '11209', to: 'status_jira_blocked' },
+  { from: '10731', to: 'status_jira_done' },
+  { from: '11000', to: 'status_jira_done' },
+  { from: '11507', to: 'status_jira_done' },
+  { from: '12074', to: 'status_jira_done' },
+  { from: '10197', to: 'status_jira_done' },
+  { from: '11507', to: 'status_jira_done' },
+  { from: '11642', to: 'status_jira_done' },
 
-            {from: '10750', to: 'status_jira_done'},
-            {from: '10779', to: 'status_jira_done'},
-            {from: '10849', to: 'status_jira_done'},
-            {from: '10953', to: 'status_jira_done'},
-            {from: '11210', to: 'status_jira_done'},
+  { from: '10750', to: 'status_jira_done' },
+  { from: '10779', to: 'status_jira_done' },
+  { from: '10849', to: 'status_jira_done' },
+  { from: '10953', to: 'status_jira_done' },
+  { from: '11210', to: 'status_jira_done' },
 
-            {from: '11211', to: 'status_jira_in_progress'},
-            {from: '11215', to: 'status_jira_qa_aprovado'},
-            {from: '11466', to: 'status_jira_qa_reprovado'},
-            {from: '11400', to: 'status_jira_review'},
-            {from: '11213', to: 'status_jira_to_do_review'},
-            {from: '11208', to: 'status_jira_to_do'},
-            {from: '11216', to: 'status_jira_release_candidate'},
-          ]
+  { from: '11211', to: 'status_jira_in_progress' },
+  { from: '11215', to: 'status_jira_qa_aprovado' },
+  { from: '11466', to: 'status_jira_qa_reprovado' },
+  { from: '11400', to: 'status_jira_review' },
+  { from: '11213', to: 'status_jira_to_do_review' },
+  { from: '11208', to: 'status_jira_to_do' },
+  { from: '11216', to: 'status_jira_release_candidate' },
+
+  //JobConvo
+  // { from: '10034', to: '' },
+  // { from: '10033', to: '' },
+  // { from: '10035', to: '' },
+  // { from: '10096', to: '' },
+  // { from: '10100', to: '' },
+  // { from: '10013', to: '' },
+  // { from: '10036', to: '' },
+  // { from: '10004', to: '' },
+  // { from: '10047', to: '' },
+  // { from: '10060', to: '' },
+  // { from: '10032', to: '' },
+  // { from: '10099', to: '' },
+  // { from: '10098', to: '' },
+  // { from: '10101', to: '' },
+  // { from: '10046', to: '' },
+  // { from: '10050', to: '' },
+  // { from: '10103', to: '' },
+  // { from: '10102', to: '' },
+]
 
 export const settings: Settings = {
   zendesk: [
@@ -55,8 +75,8 @@ export const settings: Settings = {
           map: [
             //{ from: '6', to: 'Closed' },
             //{ from: '15701', to: 'Code Review'},
-            { from: '12034', to: 'status_jira_desenv_pronto'},
-            { from: '16476', to: 'status_jira_done_app'},
+            { from: '12034', to: 'status_jira_desenv_pronto' },
+            { from: '16476', to: 'status_jira_done_app' },
             //{ from: '11126', to: 'Pronto'},
           ]
         },
@@ -78,9 +98,20 @@ export const settings: Settings = {
           jira_field_id: 'customfield_17262',
           zendesk_field_id: '360045575892',
           jira_field_value_property: 'id',
+          // map: [
+          //   { from: 'Erro', to: '30427' },
+          //   { from: 'Documentação', to: '30428' },
+          // ]
           map: [
-            { from: 'Erro', to: '30427'},
-            { from: 'Documentação', to: '30428'},
+            { from: 'natureza_geral_documentação', to: '10729' },
+            { from: 'natureza_geral_erro', to: '10727' },
+            { from: 'natureza_geral_erro_liberado', to: '37002' },
+            { from: 'natureza_geral_exigencia_legal', to: '10728' },
+            { from: 'natureza_geral_implementacao', to: '10726' },
+            { from: 'natureza_geral_incidente', to: '15033' },
+            { from: 'natureza_geral_requisicao_duvida', to: '12551' },
+            { from: 'natureza_geral_servico', to: '12559' },
+            { from: 'natureza_geral_sugestão_de_melhoria', to: '37001' },
           ]
         },
         {
@@ -135,7 +166,7 @@ export const settings: Settings = {
           zendesk_field_id: '1900001430487',
           need_underline: true,
           //is_jira_array_field: true,
-        }, 
+        },
         {
           jira_field_id: 'customfield_17230',
           zendesk_field_id: '15028699347092'
@@ -210,6 +241,81 @@ export const settings: Settings = {
           ]
         },
       ],
+    },
+    {
+      subdomain: 'jobconvo-dev',
+      email: 'mario.vilela@senior.com.br',
+      token: '',
+      linked_issue_zendesk_field_id: '40363135589396',
+      sync_fields_jira_to_zendesk: [
+        {
+          jira_field_id: 'status',
+          zendesk_field_id: '360046905051',
+          is_jira_system_field: true,
+          jira_field_value_property: 'id',
+          map: zendeskStatusMap,
+        },
+      ],
+      sync_fields_zendesk_to_jira: [
+        {
+          jira_field_id: 'customfield_10157',
+          zendesk_field_id: '360044030471',
+          is_atlasian_data: true,
+        },
+        {
+          jira_field_id: 'customfield_10164',
+          zendesk_field_id: '1900001430487',
+          is_atlasian_data: true,
+        },
+        {
+          jira_field_id: 'customfield_10219',
+          zendesk_field_id: '1900000223107',
+          //is_date: true,
+          is_iso_datetime: true,
+        },
+        {
+          jira_field_id: 'customfield_10159',
+          zendesk_field_id: '360044024652',
+          is_atlasian_data: true,
+          // jira_field_value_property: 'id',
+          // map: [
+          //   { from: 'natureza_geral_erro', to: '12286' },
+          //   { from: 'natureza_geral_documentação', to: '12285' },
+          //   { from: 'natureza_geral_erro_liberado', to: '12287' },
+          //   { from: 'natureza_geral_exigencia_legal', to: '12288' },
+          //   { from: 'natureza_geral_implementacao', to: '12289' },
+          //   { from: 'natureza_geral_incidente', to: '12290' },
+          //   { from: 'natureza_geral_requisicao_duvida', to: '12291' },
+          //   { from: 'natureza_geral_servico', to: '12292' },
+          //   { from: 'natureza_geral_sugestão_de_melhoria', to: '12293' },
+          // ]
+        },
+        {
+          jira_field_id: 'customfield_10160',
+          zendesk_field_id: 'group_id',
+          is_zendesk_system_field: true,
+          is_atlasian_data: true,
+        },
+        {
+          jira_field_id: 'customfield_10161',
+          zendesk_field_id: '1900000791827',
+          is_atlasian_data: true,
+        },
+        {
+          jira_field_id: 'priority',
+          zendesk_field_id: '360044030051',
+          is_jira_system_field: true,
+          jira_field_value_property: 'id',
+          map: [
+            //{ from: 'severidade_1_urgente', to: '10000' },
+            { from: 'severidade_1_critica', to: '1' },
+            { from: 'severidade_2_alta', to: '2' },
+            { from: 'severidade_3_media', to: '3' },
+            { from: 'severidade_4_baixa', to: '4' },
+            //{ from: 'severidade_4_baixissima', to: '5' },
+          ]
+        },
+      ],
     }
   ],
 }
@@ -244,5 +350,7 @@ export interface SyncField {
   is_jira_array_field?: boolean
   need_underline?: boolean
   is_date?: boolean
-  map?: {from: string, to: string}[]
+  map?: { from: string, to: string }[]
+  is_iso_datetime?: boolean
+  is_atlasian_data?: boolean
 }
