@@ -5,6 +5,8 @@ export default class ZendeskService {
   instanceEmail: string;
   instanceToken: string;
   service: AxiosInstance;
+  private static queue: Promise<any>[] = [];
+  private static concurrency = 3; //número de chamadas simultaneas
 
   constructor(zendeskSettings: any) {
     this.instanceSubdomain = zendeskSettings.subdomain;
@@ -17,36 +19,44 @@ export default class ZendeskService {
         "Content-Type": "application/json",
         Authorization: `Basic ${this.getBasicAuth()}`,
       },
-      timeout: 70000,
+      timeout: 90000,
     });
   }
 
-  /** ========= MÉTODO CENTRAL DE RETENTATIVA ========= */
-  private async requestWithRetry<T>(fn: () => Promise<T>): Promise<T> {
-    while (true) {
-      try {
-        return await fn();
-      } catch (err) {
-        const error = err as AxiosError;
-
-        if (error.response?.status === 429) {
-          const retryAfter = Number(error.response.headers["retry-after"] ?? 1);
-          console.warn(
-            `⚠️ Rate limit atingido. Aguardando ${retryAfter} segundos antes da nova tentativa...`
-          );
-          await new Promise((resolve) =>
-            setTimeout(resolve, retryAfter * 1000)
-          );
-          continue; // tenta de novo
-        }
-
-        // Se não for erro 429, propaga
-        throw error;
-      }
+  private static async enqueue<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.queue.length >= this.concurrency) {
+      await Promise.race(this.queue);
     }
+
+    const p = fn().finally(() => {
+      this.queue.splice(this.queue.indexOf(p), 1);
+    });
+
+    this.queue.push(p);
+    return p;
   }
 
-  /** ========= MÉTODOS ========= */
+  private async requestWithRetry<T>(fn: () => Promise<T>): Promise<T> {
+    return ZendeskService.enqueue(async () => {
+      while (true) {
+        try {
+          return await fn();
+        } catch (err: any) {
+          if (err?.response?.status === 429) {
+            const retryAfter = Number(err.response.headers["retry-after"] ?? 1);
+            console.warn(
+              `[${this.instanceSubdomain}] Rate limit atingido. Aguardando ${retryAfter}s...`
+            );
+            await new Promise((resolve) =>
+              setTimeout(resolve, retryAfter * 1000)
+            );
+            continue;
+          }
+          throw err;
+        }
+      }
+    });
+  }
 
   public async getLinkedTickets(fieldId: string): Promise<any[]> {
     const allTickets: any[] = [];
@@ -67,7 +77,7 @@ export default class ZendeskService {
         );
 
         const { results, count, next_page } = response.data;
-        console.log(`✅ Tickets encontrados: ${count}`);
+        console.log(`✅ Tickets encontrados: ${results.length}`);
 
         allTickets.push(...results);
         nextPageUrl = next_page || null;

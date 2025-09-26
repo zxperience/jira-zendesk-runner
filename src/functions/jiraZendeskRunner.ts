@@ -8,7 +8,12 @@ import { formatJiraCommentToHtml, getIssueSubdomain } from "../util/jira";
 import axios from "axios";
 import { datetimeStringToIso } from "../util/date";
 
-// Função de log de erros
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+//log de erros
 function logError(context: InvocationContext, message: string, error: any) {
     if (axios.isAxiosError(error)) {
         context.error(message, error.response?.data ?? error.message);
@@ -17,18 +22,19 @@ function logError(context: InvocationContext, message: string, error: any) {
     }
 }
 
-// Função de log de sincronização
+//log de sincronização
 function logSync(
     context: InvocationContext,
     jiraAccount: string,
     zendeskTicketId: string,
+    issueJiraKey: string,
     direction: "Zendesk -> Jira" | "Jira -> Zendesk",
     zendeskField: string,
     jiraField: string,
     value: any
 ) {
     context.log(
-        `[SYNC] Conta Jira: ${jiraAccount} | Ticket Zendesk: ${zendeskTicketId} | Direção: ${direction} | Campo Zendesk: ${zendeskField} | Campo Jira: ${jiraField} | Valor: ${JSON.stringify(value)}`
+        `[SYNC] Conta Jira: ${jiraAccount} | Ticket Zendesk: ${zendeskTicketId} | Issue Jira: ${issueJiraKey} | Direção: ${direction} | Campo Zendesk: ${zendeskField} | Campo Jira: ${jiraField} | Valor: ${JSON.stringify(value)}`
     );
 }
 
@@ -113,7 +119,7 @@ async function syncZendeskToJiraFields(
                     await jiraService.updateJiraField(issue.key, String(syncField.jira_field_id), valueToSet ?? null);
                 }
 
-                logSync(context, jiraService.instanceSubdomain, ticket.id, "Zendesk -> Jira", syncField.zendesk_field_id, syncField.jira_field_id, valueToSet);
+                logSync(context, jiraService.instanceSubdomain, ticket.id, issue.key, "Zendesk -> Jira", syncField.zendesk_field_id, syncField.jira_field_id, valueToSet);
             } catch (error) {
                 logError(context, `Erro de sincronização [Zendesk->Jira] - ticket id: ${ticket.id} | campo Zendesk: ${syncField.zendesk_field_id} | issue: ${issue.key} [${jiraService.instanceSubdomain}] | campo Jira: ${syncField.jira_field_id}`, error);
             }
@@ -175,7 +181,7 @@ async function syncJiraToZendeskFields(
                     value: valueToSet ?? null,
                 });
 
-                logSync(context, issue?.self?.split("/")[2] ?? "N/A", ticket.id, "Jira -> Zendesk", syncField.zendesk_field_id, syncField.jira_field_id, valueToSet);
+                logSync(context, issue?.self?.split("/")[2] ?? "N/A", ticket.id, issue.key, "Jira -> Zendesk", syncField.zendesk_field_id, syncField.jira_field_id, valueToSet);
             } catch (error) {
                 logError(context, `Erro de sincronização [Jira->Zendesk] - ticket id: ${ticket.id} | campo Zendesk: ${syncField.zendesk_field_id} | issue: ${issue.key} [${getIssueSubdomain(issue)}] | campo Jira: ${syncField.jira_field_id}`, error);
             }
@@ -221,7 +227,6 @@ async function syncComments(
     }
 }
 
-// Runner principal
 export async function jiraZendeskRunner(myTimer: Timer, context: InvocationContext): Promise<void> {
     context.log(">>> Iniciando rotina de sincronização");
 
@@ -272,6 +277,6 @@ export async function jiraZendeskRunner(myTimer: Timer, context: InvocationConte
 }
 
 app.timer("jiraZendeskRunner", {
-    schedule: "0 */4 * * * *",
+    schedule: "0 */6 * * * *",
     handler: jiraZendeskRunner,
 });
