@@ -136,7 +136,8 @@ export default class ZendeskService {
           )
         );
 
-        const comments = response.data.comments || [];
+        const comments = response.data.comments;
+
         console.log(
           `>>> Comentários encontrados nesta página: ${comments.length}`
         );

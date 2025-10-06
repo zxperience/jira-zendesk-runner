@@ -6,11 +6,11 @@ import JiraService from "../services/JiraService";
 import { areEquivalent } from "../util/string";
 import { formatJiraCommentToHtml, getIssueSubdomain } from "../util/jira";
 import axios from "axios";
-import { datetimeStringToIso } from "../util/date";
+import { datetimeStringToIso, formatToISOWithOffset } from "../util/date";
 
 
 function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 //log de erros
@@ -93,6 +93,14 @@ async function syncZendeskToJiraFields(
                         valueToSet = dateToSet.toISOString().replace("Z", "-0300");
                     }
                 }
+
+                if (syncField.is_datetime) {
+                    if (valueToSet === null || valueToSet === "") {
+                        valueToSet = null;
+                    } else {
+                        valueToSet = formatToISOWithOffset(valueToSet);
+                    }
+                }
                 if (syncField.is_iso_datetime) {
                     valueToSet = datetimeStringToIso(valueToSet);
                 }
@@ -107,7 +115,7 @@ async function syncZendeskToJiraFields(
                     valueToSet = {
                         type: 'doc',
                         version: 1,
-                        content: [{type: 'paragraph', content: [{type: 'text', text: valueToSet}]}]
+                        content: [{ type: 'paragraph', content: [{ type: 'text', text: valueToSet }] }]
                     };
                 }
 
@@ -218,7 +226,10 @@ async function syncComments(
             newComments.map(async (comment: any) => {
                 const formatted = formatJiraCommentToHtml(comment);
                 if (formatted.includes("#zendesk")) {
-                    await zendeskService.addPrivateComment(ticket.id, formatted);
+
+                    if (ticket.status != "closed") {
+                        await zendeskService.addPrivateComment(ticket.id, formatted);
+                    }
                 }
             })
         );
@@ -277,6 +288,6 @@ export async function jiraZendeskRunner(myTimer: Timer, context: InvocationConte
 }
 
 app.timer("jiraZendeskRunner", {
-    schedule: "0 */6 * * * *",
+    schedule: "0 */11 * * * *",
     handler: jiraZendeskRunner,
 });
